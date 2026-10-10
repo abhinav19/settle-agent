@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 
 from settleagent.agent.graph import InvestigationAgent
-from settleagent.agent.llm import LlmRefusal
+from settleagent.agent.llm import LlmError, LlmRefusal
 from settleagent.agent.nodes import AgentConfig, InvestigationNodes
 from settleagent.agent.playbook import seed_plan, validate_suggestion
 from settleagent.agent.state import initial_state
@@ -247,3 +247,17 @@ def test_initial_state_is_clean() -> None:
 
 def test_nodes_construct_without_graph() -> None:
     InvestigationNodes(RoutedLlm(), FakeGateway(), AgentConfig())
+
+
+async def test_llm_failures_are_counted_structurally() -> None:
+    """Harnesses must distinguish an LLM outage from a wrong answer without parsing notes."""
+    healthy = await run(agent(RoutedLlm(synthesize=GOOD)))
+    assert healthy.llm_failures == 0
+    down = await run(agent(DownLlm()))
+    assert down.llm_failures == 3  # plan refinement, analyze and synthesis each failed
+    plan_only = await run(agent(RoutedLlm(plan=LlmError("blip"), synthesize=GOOD)))
+    assert plan_only.llm_failures == 1 and plan_only.result.confidence > 0
+    bad_output = await run(
+        agent(RoutedLlm(synthesize=[{**GOOD, "confidence": 7}, {"nonsense": True}]))
+    )
+    assert bad_output.llm_failures == 0  # invalid output is a model mistake, not an outage

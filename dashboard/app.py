@@ -18,6 +18,8 @@ def get_client(url: str, key: str) -> ApiClient:
 
 
 api_url = os.environ.get("SETTLE_API_URL", "http://localhost:8000")
+if "://" not in api_url:  # e.g. "settleagent-api:10000" from private-network discovery
+    api_url = f"http://{api_url}"
 api_key = os.environ.get("SETTLE_API_KEY", "")
 if not api_key:
     st.set_page_config(page_title="SettleAgent Ops")

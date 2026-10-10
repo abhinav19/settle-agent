@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlparse
 
 from confluent_kafka.admin import AdminClient
@@ -50,10 +51,15 @@ def database_check(sessions: async_sessionmaker[AsyncSession]) -> ReadinessCheck
     return check
 
 
-def kafka_check(bootstrap_servers: str, timeout_s: float = 2.0) -> ReadinessCheck:
+def kafka_check(client_config: str | dict[str, Any], timeout_s: float = 2.0) -> ReadinessCheck:
+    """Brokers reachable? Pass a bootstrap string, or the full (possibly SASL) client config."""
+    conf: dict[str, str | int | float | bool] = (
+        {"bootstrap.servers": client_config} if isinstance(client_config, str) else client_config
+    )
+
     async def check() -> CheckResult:
         def probe() -> int:
-            admin = AdminClient({"bootstrap.servers": bootstrap_servers})
+            admin = AdminClient(conf)
             return len(admin.list_topics(timeout=timeout_s).brokers)
 
         brokers = await asyncio.to_thread(probe)

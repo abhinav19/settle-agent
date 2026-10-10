@@ -67,32 +67,55 @@ actions is an approval-gated remediation service, and every action is audited.
 ## Tech stack
 
 Python 3.12 · LangGraph · Claude API · MCP · FastAPI · Pydantic v2 · Streamlit ·
-Java 21 / Spring Boot 3 · Apache Kafka · PostgreSQL 16 · SQLAlchemy + Alembic ·
+Java 21 / Spring Boot 4 (Maven) · Apache Kafka · PostgreSQL 16 · SQLAlchemy + Alembic ·
 OpenTelemetry · Docker Compose · pytest / testcontainers / JUnit 5.
 
 ---
 
 ## Quickstart
 
+Prerequisites: Docker, [uv](https://docs.astral.sh/uv/), JDK 21.
+
 ```bash
-# prerequisites: Docker, uv, JDK 21
-make install        # install python + java deps
-make up             # start kafka, postgres, otel collector
+make install        # python + java deps
+make up             # kafka, postgres, otel collector, jaeger  (+ creates the topics)
 make migrate        # apply database migrations
-make seed           # generate synthetic reference datasets
-make run            # start the MCP tool servers and the agent/consumer
-make replay         # publish synthetic failures to Kafka (Python stand-in producer)
-make demo-data      # (optional) seed demo cases without calling Claude — oracle, demo only
+make seed           # generate the seeded synthetic reference data
+make run            # MCP tool servers + agent + API + dashboard
 ```
 
-Then open the Streamlit ops dashboard (default `http://localhost:8501`), the
-FastAPI docs (`http://localhost:8000/docs`), and Jaeger for traces (`http://localhost:16686`;
-the dashboard links each case to its trace). Metrics are scrapeable at
-`http://localhost:8889/metrics`.
+Then open the Streamlit ops dashboard (`http://localhost:8501`), the FastAPI docs
+(`http://localhost:8000/docs`), and Jaeger (`http://localhost:16686`; the dashboard links each
+case to its trace). Metrics are scrapeable at `http://localhost:8889/metrics`.
+
+**Feed it events**
 
 ```bash
-make test           # unit + integration tests with coverage gates
-make eval           # run the 300-case evaluation harness and emit a scorecard
+make replay                       # Python stand-in producer: 20 seeded failures
+cd producer-service && PRODUCER_MODE=replay PRODUCER_LIMIT=20 ./mvnw spring-boot:run   # the Java producer
+make demo-data                    # seed demo cases WITHOUT calling Claude (oracle; demo only)
+```
+
+**Or run the whole system in containers**
+
+```bash
+echo "API_KEY=$(openssl rand -hex 16)" >> .env       # + ANTHROPIC_API_KEY=... for real investigations
+make up-app                                           # builds and starts everything
+docker compose --profile app run --rm producer        # replay the seeded failures
+make smoke SMOKE_COUNT=30                             # publish, wait, and report throughput
+```
+
+Without an `ANTHROPIC_API_KEY` the pipeline still runs end to end — the agent degrades gracefully
+and escalates every case to a human — which is a useful wiring check but says nothing about
+model quality.
+
+**Test and evaluate**
+
+```bash
+make lint && make test        # ruff, mypy --strict, Spotless; unit + integration (testcontainers) + JUnit
+make eval-estimate            # free: price an evaluation run before spending anything
+make eval-simulate            # free: exercise the harness end to end with a SIMULATED model
+make eval EVAL_MAX_COST=25    # REAL run: 300 cases, hard-capped spend (see evals/README.md)
 ```
 
 ---
@@ -111,13 +134,57 @@ make eval           # run the 300-case evaluation harness and emit a scorecard
 
 ---
 
+## Safety controls
+
+The design principle is *separate reasoning from control*. The model proposes; code disposes.
+
+| Control | What it guarantees |
+|---|---|
+| Read-only tools | The agent can only *read* reference data; there are no write tools on the MCP servers. |
+| Deterministic confidence gate | Routing is a pure function of the validated result — no model output is acted on without it. |
+| Evidence-verified fixes | A write is re-derived from the case's own tool evidence (right trade, supported values); a model-invented SSI, quantity or date is escalated, never offered. |
+| Approval gate | A state-changing fix runs only after an explicit human approval; execution is idempotent, audited and reversible. |
+| Structured outputs + repair | Malformed model output gets one repair attempt, then escalates to a human. |
+| Step budget, timeouts, circuit breakers | A run cannot loop, hang, or hammer a failing tool server. |
+| **Hard cost ceiling** | Once spend reaches `COST_CEILING_USD`, new cases skip the LLM and go to a human (with an audit reason). Alerts at 80 % and 100 %. |
+| LLM rate/concurrency limits | Bounded in-flight cases, a concurrency cap and a token-bucket rate on model calls. |
+| Idempotency + DLQ | Redelivered events are no-ops; poison messages are dead-lettered with the validation error. |
+| Immutable audit trail | `audit_events` and the settlement ledger are append-only, enforced by database triggers. |
+| Graceful shutdown | In-flight cases drain up to `SHUTDOWN_GRACE_S`; anything cancelled is recovered on the next start. |
+
+---
+
 ## Evaluation
 
-The `evals/` harness runs the real agent over 300 labelled cases and reports
-root-cause accuracy, a precision/recall curve for auto-resolution across confidence
-thresholds, an escalation rate, and cost/latency percentiles. The committed scorecard
-is the evidence that the system behaves safely — and the chosen confidence threshold
-comes directly from the precision/recall curve, not a guess.
+The `evals/` harness runs the real agent over 300 labelled cases and reports root-cause
+accuracy, a precision/recall curve for auto-resolution across confidence thresholds, an escalation
+rate, and cost/latency percentiles. The production confidence threshold is chosen *from that
+curve*, and a committed baseline guards against regressions.
+
+> **Status: not yet run against Claude.** The harness is built and tested, and a full run is
+> estimated at roughly $8–35 on Opus 5.5 (`make eval-estimate`). Until it has been run,
+> `AUTO_THRESHOLD=0.9` is a placeholder and **no accuracy claim is made for the model**.
+
+---
+
+## Event contract (Java ↔ Python)
+
+The Kafka message `SettlementFailureEvent` v1.0 is defined once, by the Pydantic model; its JSON
+Schema is committed in [`contracts/`](./contracts). The Java producer validates its output against
+that schema, and a golden file of Java-produced events is parsed by the real strict Python model in
+CI — so drift in either language fails a test. After a deliberate change: `make contract-update`.
+
+---
+
+## Deployment
+
+* **Local:** `make up-app` (above). Images: `agent-core` (agent + API), `mcp-servers`,
+  `dashboard`, `producer-service` — each has a `Dockerfile`; CI builds them all.
+* **Render:** [`render.yaml`](./render.yaml) is a Blueprint for Postgres, the four private MCP
+  servers, the agent worker, API, dashboard and an optional demo producer. Render has no managed
+  Kafka, so you supply one (Confluent Cloud, Upstash, …) via the `KAFKA_*` variables, which support
+  SASL. Hosted defaults keep `COST_CEILING_USD` low. *The blueprint is checked statically by tests
+  but has not been deployed from this repository.*
 
 ---
 
@@ -127,21 +194,27 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full architecture, component specificatio
 data contracts, testing strategy, and the phased implementation plan.
 
 ```
-producer-service/   Java/Spring Boot synthetic event source
-agent-core/         Python: domain, consumer, agent, gate, remediation, api, persistence
-mcp-servers/        four read-only MCP tool servers
-dashboard/          Streamlit ops UI
-evals/              300-case evaluation harness + scorecard
+producer-service/   Java 21 / Spring Boot 4 synthetic event source (replay + stream)
+agent-core/         Python: domain, consumer, agent, gate, remediation, api, persistence, observability
+mcp-servers/        four read-only MCP tool servers + the seeded synthetic data generator
+dashboard/          Streamlit ops UI (talks to the API only)
+evals/              300-case evaluation harness, regression guard, scorecards
+contracts/          the Kafka message contract (JSON Schema + Java golden file)
+data/synthetic/     seeded reference data and labelled scenarios
+render.yaml         Render Blueprint            docker-compose.yml   local infra + `app` profile
 ```
 
 ---
 
-## Status & roadmap
+## Status
 
-Built in vertical slices: domain & persistence → synthetic data & MCP servers →
-agent + consumer + gate (working end-to-end slice) → remediation & approvals → API &
-dashboard → observability → evaluation harness → hardening & deploy. See the phased
-plan in `CLAUDE.md`.
+All eight phases are implemented and tested (domain & persistence → synthetic data & MCP servers →
+agent/consumer/gate → remediation & approvals → API & dashboard → observability → evaluation
+harness → hardening & deploy); see the phased plan in `CLAUDE.md`.
+
+**Verified:** unit, integration (real Kafka and Postgres via testcontainers), JUnit (including an
+embedded-Kafka round trip), a load/smoke test, and the Java↔Python contract. **Not verified:**
+behaviour of the real Claude model (see *Evaluation*) and a Render deployment.
 
 ## License
 

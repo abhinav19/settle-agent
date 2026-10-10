@@ -13,6 +13,10 @@ from settleagent.observability.telemetry import NOOP, Telemetry
 log = logging.getLogger(__name__)
 
 
+def _usd(x: float) -> str:
+    return f"${x:,.4f}" if x < 1 else f"${x:,.2f}"
+
+
 @dataclass(frozen=True)
 class BudgetAlert:
     kind: str  # "budget_threshold" | "case_cost"
@@ -45,6 +49,24 @@ class CostTracker:
         self._total = total_usd
         self._fired = {t for t in self._thresholds if self._total >= t * self._ceiling}
 
+    def sync(self, db_total_usd: float) -> None:
+        """Adopt the database's spend if it is higher (other replicas / earlier runs spent too).
+
+        Never lowers the local figure, and never re-fires alerts that already fired.
+        """
+        if db_total_usd > self._total:
+            self._total = db_total_usd
+            self._fired |= {t for t in self._thresholds if self._total >= t * self._ceiling}
+
+    @property
+    def ceiling_usd(self) -> float:
+        return self._ceiling
+
+    @property
+    def exceeded(self) -> bool:
+        """True once spend has reached the ceiling: new investigations must not call the LLM."""
+        return self._total >= self._ceiling
+
     @property
     def total_usd(self) -> float:
         return self._total
@@ -59,7 +81,9 @@ class CostTracker:
         alerts: list[BudgetAlert] = []
         if cost_usd > self._per_case:
             alerts.append(
-                BudgetAlert("case_cost", f"case cost ${cost_usd:.4f} exceeds ${self._per_case:.2f}")
+                BudgetAlert(
+                    "case_cost", f"case cost {_usd(cost_usd)} exceeds {_usd(self._per_case)}"
+                )
             )
         for t in self._thresholds:
             if t not in self._fired and self._total >= t * self._ceiling:
@@ -67,8 +91,8 @@ class CostTracker:
                 alerts.append(
                     BudgetAlert(
                         "budget_threshold",
-                        f"spend ${self._total:.2f} reached {t:.0%} of the "
-                        f"${self._ceiling:.2f} budget",
+                        f"spend {_usd(self._total)} reached {t:.0%} of the "
+                        f"{_usd(self._ceiling)} budget",
                         t,
                     )
                 )

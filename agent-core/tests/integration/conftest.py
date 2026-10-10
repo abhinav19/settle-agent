@@ -56,3 +56,44 @@ def kafka_bootstrap() -> Iterator[str]:
 
     with KafkaContainer().with_kraft() as kafka:
         yield kafka.get_bootstrap_server()
+
+
+@pytest.fixture
+async def isolated_sessions(database_url: str) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """A brand-new, fully migrated database inside the test Postgres.
+
+    For tests that must not see (or recover!) cases left behind by other tests, such as load
+    tests: the consumer re-dispatches every incomplete case in its database on startup.
+    """
+    import uuid
+
+    import psycopg
+    from sqlalchemy.engine import make_url
+
+    name = f"iso_{uuid.uuid4().hex[:10]}"
+    admin = make_url(database_url)
+    with psycopg.connect(
+        admin.set(drivername="postgresql").render_as_string(hide_password=False), autocommit=True
+    ) as conn:
+        conn.execute(f'CREATE DATABASE "{name}"')
+    url = admin.set(database=name).render_as_string(hide_password=False)
+
+    previous = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
+    try:
+        cfg = Config(str(ROOT / "alembic.ini"))
+        cfg.set_main_option("script_location", str(ROOT / "alembic"))
+        command.upgrade(cfg, "head")
+    finally:
+        if previous is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous
+
+    engine = make_engine(url)
+    yield make_session_factory(engine)
+    await engine.dispose()
+    with psycopg.connect(
+        admin.set(drivername="postgresql").render_as_string(hide_password=False), autocommit=True
+    ) as conn:
+        conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')

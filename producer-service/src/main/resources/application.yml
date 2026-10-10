@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: producer-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
+        linger.ms: 5
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+producer:
+  mode: ${PRODUCER_MODE:idle}            # idle | replay | stream
+  topic: ${KAFKA_TOPIC:settlement.failures}
+  fixtures: ${PRODUCER_FIXTURES:../data/synthetic/dataset.json}
+  rate: ${PRODUCER_RATE:0}                # events/second (stream rate / replay throttle)
+  limit: ${PRODUCER_LIMIT:0}
+  offset: ${PRODUCER_OFFSET:0}
+  seed: ${PRODUCER_SEED:42}
+  exit-after-replay: ${PRODUCER_EXIT_AFTER_REPLAY:true}

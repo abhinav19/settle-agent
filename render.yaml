@@ -1,0 +1,129 @@
+# Render Blueprint for SettleAgent  (Dashboard -> New -> Blueprint -> select this repo).
+#
+# What this creates: Postgres, four private MCP tool servers, the agent (worker), the control-plane
+# API and ops dashboard (web), and an optional demo event producer (worker).
+#
+# What it does NOT create: Kafka. Render has no managed Kafka. Provision one elsewhere (Confluent
+# Cloud, Upstash, Redpanda Cloud, MSK...) and fill the `sync: false` variables below in the
+# Render dashboard. The code supports SASL via the KAFKA_SASL_* variables.
+#
+# OpenTelemetry is off here (OTEL_ENABLED=false); point OTEL_EXPORTER_OTLP_ENDPOINT at your
+# collector and flip it on if you run one.
+#
+# Cost control: COST_CEILING_USD hard-stops LLM spend (new cases go to a human). Keep it low
+# until you have run the evaluation harness (evals/) and set AUTO_THRESHOLD from its results.
+
+databases:
+  - name: settleagent-db
+    databaseName: settleagent
+    user: settleagent
+    plan: free
+
+services:
+  # ------------------------------------------------------------------ MCP tool servers (private)
+  - type: pserv
+    name: mcp-security-master
+    runtime: docker
+    dockerfilePath: ./mcp-servers/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m security_master.server
+    envVars:
+      - {key: SETTLE_MCP_PORT, value: "10000"}
+
+  - type: pserv
+    name: mcp-ssi-store
+    runtime: docker
+    dockerfilePath: ./mcp-servers/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m ssi_store.server
+    envVars:
+      - {key: SETTLE_MCP_PORT, value: "10000"}
+
+  - type: pserv
+    name: mcp-holiday-calendar
+    runtime: docker
+    dockerfilePath: ./mcp-servers/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m holiday_calendar.server
+    envVars:
+      - {key: SETTLE_MCP_PORT, value: "10000"}
+
+  - type: pserv
+    name: mcp-trade-store
+    runtime: docker
+    dockerfilePath: ./mcp-servers/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m trade_store.server
+    envVars:
+      - {key: SETTLE_MCP_PORT, value: "10000"}
+
+  # ----------------------------------------------------------------------- control-plane API
+  - type: web
+    name: settleagent-api
+    runtime: docker
+    dockerfilePath: ./agent-core/Dockerfile
+    dockerContext: .
+    # migrations are idempotent; run them on every start (single instance)
+    dockerCommand: >-
+      sh -c "alembic upgrade head &&
+      uvicorn --factory settleagent.api.main:create_app_from_settings --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - {key: DATABASE_URL, fromDatabase: {name: settleagent-db, property: connectionString}}
+      - {key: API_KEY, generateValue: true}
+      - {key: KAFKA_BOOTSTRAP_SERVERS, sync: false}
+      - {key: KAFKA_SECURITY_PROTOCOL, sync: false}
+      - {key: KAFKA_SASL_MECHANISM, sync: false}
+      - {key: KAFKA_SASL_USERNAME, sync: false}
+      - {key: KAFKA_SASL_PASSWORD, sync: false}
+      - {key: OTEL_ENABLED, value: "false"}
+      - {key: READY_REQUIRES_OTEL, value: "false"}
+      - {key: COST_CEILING_USD, value: "10"}
+
+  # ----------------------------------------------------------------------- the agent (consumer)
+  - type: worker
+    name: settleagent-agent
+    runtime: docker
+    dockerfilePath: ./agent-core/Dockerfile
+    dockerContext: .
+    envVars:
+      - {key: DATABASE_URL, fromDatabase: {name: settleagent-db, property: connectionString}}
+      - {key: API_KEY, fromService: {type: web, name: settleagent-api, envVarKey: API_KEY}}
+      - {key: ANTHROPIC_API_KEY, sync: false}
+      - {key: ANTHROPIC_MODEL, value: claude-opus-5-5}
+      - {key: KAFKA_BOOTSTRAP_SERVERS, sync: false}
+      - {key: KAFKA_SECURITY_PROTOCOL, sync: false}
+      - {key: KAFKA_SASL_MECHANISM, sync: false}
+      - {key: KAFKA_SASL_USERNAME, sync: false}
+      - {key: KAFKA_SASL_PASSWORD, sync: false}
+      - {key: MCP_SECURITY_MASTER_URL, fromService: {type: pserv, name: mcp-security-master, property: hostport}}
+      - {key: MCP_SSI_STORE_URL, fromService: {type: pserv, name: mcp-ssi-store, property: hostport}}
+      - {key: MCP_HOLIDAY_CALENDAR_URL, fromService: {type: pserv, name: mcp-holiday-calendar, property: hostport}}
+      - {key: MCP_TRADE_STORE_URL, fromService: {type: pserv, name: mcp-trade-store, property: hostport}}
+      - {key: OTEL_ENABLED, value: "false"}
+      - {key: COST_CEILING_USD, value: "10"}
+      - {key: AUTO_THRESHOLD, value: "0.9"}   # placeholder: set from `make eval-baseline`
+
+  # ------------------------------------------------------------------------ ops dashboard
+  - type: web
+    name: settleagent-dashboard
+    runtime: docker
+    dockerfilePath: ./dashboard/Dockerfile
+    dockerContext: .
+    envVars:
+      - {key: SETTLE_API_URL, fromService: {type: web, name: settleagent-api, property: hostport}}
+      - {key: SETTLE_API_KEY, fromService: {type: web, name: settleagent-api, envVarKey: API_KEY}}
+
+  # ------------------------------------------------- optional: demo event stream (Java producer)
+  - type: worker
+    name: settleagent-producer
+    runtime: docker
+    dockerfilePath: ./producer-service/Dockerfile
+    dockerContext: .
+    envVars:
+      - {key: PRODUCER_MODE, value: stream}
+      - {key: PRODUCER_RATE, value: "0.2"}     # one synthetic failure every 5 seconds
+      - {key: KAFKA_BOOTSTRAP_SERVERS, sync: false}
+      - {key: SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL, sync: false}
+      - {key: SPRING_KAFKA_PROPERTIES_SASL_MECHANISM, sync: false}
+      - {key: SPRING_KAFKA_PROPERTIES_SASL_JAAS_CONFIG, sync: false}

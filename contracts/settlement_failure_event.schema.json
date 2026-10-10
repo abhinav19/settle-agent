@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "ReasonCode": {
+      "description": "Failure reason carried on the settlement status message.",
+      "enum": [
+        "LACK",
+        "MONY",
+        "NMAT",
+        "CMIS",
+        "SSIM",
+        "DENO",
+        "LATE",
+        "CALD"
+      ],
+      "title": "ReasonCode",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A settlement-failure status message (modeled on semt.018 / MT548).",
+  "properties": {
+    "cash_amount": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Cash Amount"
+    },
+    "counterparty_bic": {
+      "pattern": "^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$",
+      "title": "Counterparty Bic",
+      "type": "string"
+    },
+    "currency": {
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+    },
+    "emitted_at": {
+      "format": "date-time",
+      "title": "Emitted At",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "isin": {
+      "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$",
+      "title": "Isin",
+      "type": "string"
+    },
+    "quantity": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Quantity"
+    },
+    "raw_message": {
+      "minLength": 1,
+      "title": "Raw Message",
+      "type": "string"
+    },
+    "reason_code": {
+      "$ref": "#/$defs/ReasonCode"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "settlement_date": {
+      "format": "date",
+      "title": "Settlement Date",
+      "type": "string"
+    },
+    "trade_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Trade Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "emitted_at",
+    "trade_id",
+    "isin",
+    "settlement_date",
+    "counterparty_bic",
+    "reason_code",
+    "quantity",
+    "cash_amount",
+    "currency",
+    "raw_message"
+  ],
+  "title": "SettlementFailureEvent",
+  "type": "object"
+}

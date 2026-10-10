@@ -40,3 +40,6 @@ tmp/
 
 # --- local agent guide (kept on disk, not published) ---
 CLAUDE.md
+
+# --- eval run outputs (a real run's scorecard/baseline are committed deliberately, by hand) ---
+evals/runs/

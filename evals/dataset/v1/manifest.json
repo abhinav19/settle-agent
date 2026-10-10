@@ -1,0 +1,22 @@
+{
+ "cases_sha256": "d4affcdcee9097211329aa78ee875d1d8bd70797b893d71cef672d6db3f9cd6d",
+ "dataset_version": "1",
+ "mix": {
+  "ambiguous": 75,
+  "clear": 180,
+  "underdetermined": 45
+ },
+ "n_cases": 300,
+ "reason_codes": [
+  "CALD",
+  "CMIS",
+  "DENO",
+  "LACK",
+  "LATE",
+  "MONY",
+  "NMAT",
+  "SSIM"
+ ],
+ "reference_data_sha256": "3674986c95ebde0556c07fe11eb3df189be003cc69f2a4d309afc7e5a4e07f05",
+ "seed": 42
+}

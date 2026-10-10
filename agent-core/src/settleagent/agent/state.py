@@ -49,6 +49,7 @@ class InvestigationState(TypedDict):
     tokens: int
     input_tokens: int
     output_tokens: int
+    llm_failures: int
     model: str
     notes: list[str]
     result: InvestigationResult | None
@@ -74,6 +75,7 @@ def initial_state(
         tokens=0,
         input_tokens=0,
         output_tokens=0,
+        llm_failures=0,
         model="none",
         notes=[],
         result=None,

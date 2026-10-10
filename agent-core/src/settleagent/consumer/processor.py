@@ -142,6 +142,10 @@ class CaseProcessor:
                     case_id, ActorType.SYSTEM, "case.investigation_started", {}, now
                 )
 
+        if self._cost_tracker is not None and self._cost_tracker.exceeded:
+            span.set_attribute("budget.blocked", True)
+            return await self._defer_over_budget(case_id, case.event)
+
         trace_id = self._telemetry.current_trace_id() or self._new_trace_id()
         try:
             run = await self._agent.investigate(case.event, case_id, trace_id)
@@ -156,6 +160,33 @@ class CaseProcessor:
             span.set_attribute("case.noop", True)
             async with self._sessions() as session:
                 return await CaseRepository(session).get(case_id)
+
+    async def _defer_over_budget(self, case_id: UUID, event: SettlementFailureEvent) -> Case:
+        """The cost ceiling is reached: hand the case to a human WITHOUT calling the LLM."""
+        assert self._cost_tracker is not None  # noqa: S101 - only called when a tracker exists
+        now = self._clock()
+        payload = {
+            "total_usd": round(self._cost_tracker.total_usd, 6),
+            "ceiling_usd": self._cost_tracker.ceiling_usd,
+        }
+        async with self._sessions() as session, session.begin():
+            case = await CaseRepository(session).transition(
+                case_id, CaseStatus.ESCALATED, now, decision=Decision.HUMAN_REVIEW
+            )
+            await AuditRepository(session).append(
+                case_id, ActorType.SYSTEM, "budget.ceiling_reached", payload, now
+            )
+        log.warning("cost ceiling reached; case escalated without investigation", extra=payload)
+        self._telemetry.budget_blocked.add(1, {"reason_code": event.reason_code.value})
+        self._telemetry.cases_processed.add(
+            1,
+            {
+                "status": "ESCALATED",
+                "decision": "budget_blocked",
+                "reason_code": event.reason_code.value,
+            },
+        )
+        return case
 
     async def _fail(
         self, case_id: UUID, event: SettlementFailureEvent, exc: Exception, started: float

@@ -110,6 +110,7 @@ class InvestigationNodes:
         notes = [f"prompt_version={prompts.PROMPT_VERSION}"]
         steps, tokens, model = state["steps_used"], state["tokens"], state["model"]
         tok_in, tok_out = state["input_tokens"], state["output_tokens"]
+        failures = state["llm_failures"]
 
         if self._cfg.llm_plan_refine and steps < self._cfg.max_steps - TOOL_RESERVE:
             steps += 1
@@ -120,6 +121,7 @@ class InvestigationNodes:
                     schema=prompts.PLAN_SCHEMA,
                 )
             except LlmError as exc:
+                failures += 1
                 notes.append(f"plan refinement skipped: {exc}")
             else:
                 tokens += reply.total_tokens
@@ -140,6 +142,7 @@ class InvestigationNodes:
             "tokens": tokens,
             "input_tokens": tok_in,
             "output_tokens": tok_out,
+            "llm_failures": failures,
             "model": model,
             "notes": state["notes"] + notes,
         }
@@ -215,6 +218,7 @@ class InvestigationNodes:
                 "steps_used": steps,
                 "analyze_rounds": rounds,
                 "sufficient": True,
+                "llm_failures": state["llm_failures"] + 1,
                 "notes": state["notes"] + [f"analyze failed: {exc}"],
             }
         taken = set(state["done_keys"])
@@ -239,6 +243,7 @@ class InvestigationNodes:
         notes = list(state["notes"])
         steps, tokens, model = state["steps_used"], state["tokens"], state["model"]
         tok_in, tok_out = state["input_tokens"], state["output_tokens"]
+        failures = state["llm_failures"]
 
         def fallback(reason: str) -> dict[str, Any]:
             notes.append(f"escalated: {reason}")
@@ -254,6 +259,7 @@ class InvestigationNodes:
                 "tokens": tokens,
                 "input_tokens": tok_in,
                 "output_tokens": tok_out,
+                "llm_failures": failures,
                 "model": model,
                 "notes": notes,
             }
@@ -275,6 +281,7 @@ class InvestigationNodes:
                     system=prompts.SYSTEM_PROMPT, user=user, schema=prompts.SYNTHESIZE_SCHEMA
                 )
             except LlmError as exc:
+                failures += 1
                 return fallback(f"llm unavailable: {exc}")
             tokens += reply.total_tokens
             tok_in += reply.input_tokens
@@ -308,6 +315,7 @@ class InvestigationNodes:
                 "tokens": tokens,
                 "input_tokens": tok_in,
                 "output_tokens": tok_out,
+                "llm_failures": failures,
                 "model": model,
                 "notes": notes + adjustments,
             }

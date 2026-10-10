@@ -25,7 +25,7 @@ def create_app_from_settings() -> FastAPI:
     sessions = make_session_factory(engine)
     checks = {
         "database": database_check(sessions),
-        "kafka": kafka_check(settings.kafka_bootstrap_servers),
+        "kafka": kafka_check(settings.kafka_client_config()),
     }
     if settings.ready_requires_otel:
         checks["otel"] = tcp_check(settings.otel_exporter_otlp_endpoint)

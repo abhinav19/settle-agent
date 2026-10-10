@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from settleagent.agent.graph import InvestigationAgent
 from settleagent.agent.llm import AnthropicLlm
 from settleagent.agent.nodes import AgentConfig
+from settleagent.agent.ratelimit import RateLimitedLlm
 from settleagent.config import Settings, get_settings
 from settleagent.consumer.dlq import KafkaDlqPublisher
 from settleagent.consumer.kafka import CaseConsumer, ConsumerLike
@@ -80,8 +81,14 @@ def build_agent(settings: Settings, telemetry: Telemetry) -> InvestigationAgent:
         effort=settings.llm_effort,
         max_tokens=settings.llm_max_tokens,
     )
+    limited = RateLimitedLlm(
+        TracedLlm(llm, telemetry),  # the span times the call itself, not the queueing
+        max_concurrent=settings.llm_max_concurrency,
+        requests_per_minute=settings.llm_requests_per_minute,
+        burst=settings.llm_burst,
+    )
     return InvestigationAgent(
-        TracedLlm(llm, telemetry),
+        limited,
         TracedGateway(build_gateway(settings), telemetry),
         AgentConfig(
             max_steps=settings.max_steps,
@@ -107,17 +114,17 @@ def build_app(settings: Settings, telemetry: Telemetry) -> App:
         cost_tracker=cost_tracker,
     )
     dlq = KafkaDlqPublisher(
-        Producer(
-            {"bootstrap.servers": settings.kafka_bootstrap_servers, "enable.idempotence": True}
-        ),
+        Producer({**settings.kafka_client_config(), "enable.idempotence": True}),
         settings.kafka_dlq_topic,
     )
     kafka = Consumer(
         {
-            "bootstrap.servers": settings.kafka_bootstrap_servers,
+            **settings.kafka_client_config(),
             "group.id": settings.kafka_group_id,
             "enable.auto.commit": False,
             "auto.offset.reset": "earliest",
+            # investigations can legitimately block polling (backpressure); don't get kicked out
+            "max.poll.interval.ms": settings.kafka_max_poll_interval_ms,
         }
     )
     consumer = CaseConsumer(
@@ -127,6 +134,7 @@ def build_app(settings: Settings, telemetry: Telemetry) -> App:
         dlq,
         processor,
         max_inflight=settings.max_inflight_cases,
+        drain_timeout_s=settings.shutdown_grace_s,
     )
     return App(consumer=consumer, engine=engine, telemetry=telemetry, cost_tracker=cost_tracker)
 
@@ -141,6 +149,7 @@ async def _report_gauges(app: App) -> None:
             app.telemetry.set_gauges(
                 queue_depth=m.queue_depth, pending_approvals=m.pending_approvals
             )
+            app.cost_tracker.sync(m.total_cost_usd)  # other replicas / restarts may have spent
         except Exception:  # noqa: BLE001 - metrics must never take the pipeline down
             log.warning("could not refresh queue gauges", exc_info=True)
         await asyncio.sleep(GAUGE_REFRESH_S)

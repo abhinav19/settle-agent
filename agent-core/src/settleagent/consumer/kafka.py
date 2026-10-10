@@ -50,6 +50,7 @@ class CaseConsumer:
         max_attempts: int = 5,
         backoff_s: float = 1.0,
         poll_timeout_s: float = 0.5,
+        drain_timeout_s: float | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._consumer = consumer
@@ -61,6 +62,9 @@ class CaseConsumer:
         self._backoff = backoff_s
         self._poll_timeout = poll_timeout_s
         self._sleep = sleep
+        self._drain_timeout = drain_timeout_s
+        self.peak_inflight = 0
+        self._inflight = 0
         self._slots = asyncio.Semaphore(max_inflight)
         self._tasks: set[asyncio.Task[None]] = set()
         self._stop = asyncio.Event()
@@ -71,7 +75,9 @@ class CaseConsumer:
 
     @property
     def inflight(self) -> int:
-        return len(self._tasks)
+        """Investigations currently running (counted directly, not via the task set, which
+        briefly retains a finished task until its done-callback runs)."""
+        return self._inflight
 
     async def run(self) -> None:
         self._consumer.subscribe([self._topic])
@@ -137,6 +143,8 @@ class CaseConsumer:
 
     async def _dispatch(self, case_id: UUID) -> None:
         await self._slots.acquire()  # blocks polling when saturated -> backpressure
+        self._inflight += 1
+        self.peak_inflight = max(self.peak_inflight, self._inflight)
         task = asyncio.create_task(self._run_case(case_id))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -147,9 +155,23 @@ class CaseConsumer:
         except Exception:
             log.exception("investigation of case %s raised", case_id)
         finally:
+            self._inflight -= 1
             self._slots.release()
 
     async def _drain(self) -> None:
-        if self._tasks:
-            log.info("draining %d in-flight case(s)", len(self._tasks))
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+        """Let in-flight cases finish; after ``drain_timeout_s`` cancel the rest.
+
+        A cancelled case stays INVESTIGATING in the database and is picked up by the startup
+        recovery of the next process, so a slow deploy never wedges or loses work.
+        """
+        if not self._tasks:
+            return
+        log.info("draining %d in-flight case(s)", len(self._tasks))
+        _, pending = await asyncio.wait(self._tasks, timeout=self._drain_timeout)
+        if pending:
+            log.warning(
+                "drain timeout: cancelling %d case(s); they will be recovered", len(pending)
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)

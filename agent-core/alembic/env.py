@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from sqlalchemy import create_engine
 
 from alembic import context
+from settleagent.config import normalize_database_url
 from settleagent.persistence.models import Base
 
 config = context.config
@@ -17,7 +18,7 @@ target_metadata = Base.metadata
 
 def _url() -> str:
     try:
-        return os.environ["DATABASE_URL"]
+        return normalize_database_url(os.environ["DATABASE_URL"])
     except KeyError as exc:
         raise RuntimeError("DATABASE_URL must be set to run migrations") from exc
 

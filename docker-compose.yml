@@ -48,5 +48,109 @@ services:
     ports: ["4317:4317", "4318:4318", "8889:8889"]
     depends_on: [jaeger]
 
+  # ---------------------------------------------------------------- application (profile: app)
+  # docker compose --profile app up -d --build
+  # Secrets/overrides come from .env (see .env.example). The Kafka listener used inside the
+  # compose network is kafka:29092 (localhost:9092 is for tools on your host).
+  migrate:
+    profiles: ["app"]
+    build: {context: ., dockerfile: agent-core/Dockerfile}
+    image: settleagent/agent-core
+    command: ["alembic", "upgrade", "head"]
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgresql+psycopg://settleagent:settleagent@postgres:5432/settleagent
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  mcp-security-master: &mcp
+    profiles: ["app"]
+    build: {context: ., dockerfile: mcp-servers/Dockerfile}
+    image: settleagent/mcp-servers
+    command: ["python", "-m", "security_master.server"]
+    environment: {SETTLE_MCP_PORT: "8101"}
+  mcp-ssi-store:
+    <<: *mcp
+    command: ["python", "-m", "ssi_store.server"]
+    environment: {SETTLE_MCP_PORT: "8102"}
+  mcp-holiday-calendar:
+    <<: *mcp
+    command: ["python", "-m", "holiday_calendar.server"]
+    environment: {SETTLE_MCP_PORT: "8103"}
+  mcp-trade-store:
+    <<: *mcp
+    command: ["python", "-m", "trade_store.server"]
+    environment: {SETTLE_MCP_PORT: "8104"}
+
+  agent:
+    profiles: ["app"]
+    image: settleagent/agent-core
+    build: {context: ., dockerfile: agent-core/Dockerfile}
+    restart: unless-stopped
+    environment: &agent_env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql+psycopg://settleagent:settleagent@postgres:5432/settleagent
+      API_KEY: ${API_KEY:?set API_KEY (16+ characters) in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+      AUTO_THRESHOLD: ${AUTO_THRESHOLD:-0.9}
+      COST_CEILING_USD: ${COST_CEILING_USD:-50}
+      MCP_SECURITY_MASTER_URL: mcp-security-master:8101
+      MCP_SSI_STORE_URL: mcp-ssi-store:8102
+      MCP_HOLIDAY_CALENDAR_URL: mcp-holiday-calendar:8103
+      MCP_TRADE_STORE_URL: mcp-trade-store:8104
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      kafka: {condition: service_healthy}
+      mcp-security-master: {condition: service_started}
+      mcp-ssi-store: {condition: service_started}
+      mcp-holiday-calendar: {condition: service_started}
+      mcp-trade-store: {condition: service_started}
+
+  api:
+    profiles: ["app"]
+    image: settleagent/agent-core
+    command: ["uvicorn", "--factory", "settleagent.api.main:create_app_from_settings",
+              "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    environment: *agent_env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  dashboard:
+    profiles: ["app"]
+    build: {context: ., dockerfile: dashboard/Dockerfile}
+    image: settleagent/dashboard
+    restart: unless-stopped
+    ports: ["8501:8501"]
+    environment:
+      SETTLE_API_URL: http://api:8000
+      SETTLE_API_KEY: ${API_KEY:?set API_KEY (16+ characters) in .env}
+      TRACE_URL_TEMPLATE: ${TRACE_URL_TEMPLATE:-http://localhost:16686/trace/{trace_id}}
+    depends_on:
+      api: {condition: service_healthy}
+
+  # One-shot replay of the seeded failures: docker compose --profile app run --rm producer
+  producer:
+    profiles: ["app"]
+    build: {context: ., dockerfile: producer-service/Dockerfile}
+    image: settleagent/producer
+    restart: "no"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      PRODUCER_MODE: ${PRODUCER_MODE:-replay}
+      PRODUCER_LIMIT: ${PRODUCER_LIMIT:-20}
+      PRODUCER_RATE: ${PRODUCER_RATE:-0}
+    depends_on:
+      kafka: {condition: service_healthy}
+
 volumes:
   pgdata:

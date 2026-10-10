@@ -30,6 +30,7 @@ class AgentRun:
     tokens: int
     input_tokens: int
     output_tokens: int
+    llm_failures: int
     model: str
 
 
@@ -98,5 +99,6 @@ class InvestigationAgent:
             tokens=final["tokens"],
             input_tokens=final["input_tokens"],
             output_tokens=final["output_tokens"],
+            llm_failures=final["llm_failures"],
             model=final["model"],
         )

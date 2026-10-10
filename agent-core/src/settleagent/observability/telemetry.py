@@ -53,6 +53,7 @@ class Telemetry:
         self.llm_duration = meter.create_histogram("settleagent.llm.duration", unit="ms")
         self.remediation_actions = meter.create_counter("settleagent.remediation.actions")
         self.budget_alerts = meter.create_counter("settleagent.budget.alerts")
+        self.budget_blocked = meter.create_counter("settleagent.budget.blocked")
 
         self._gauges: dict[str, float] = {"queue_depth": 0.0, "pending_approvals": 0.0}
         for key, name in (
