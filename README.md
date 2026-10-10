@@ -80,7 +80,8 @@ make install        # install python + java deps
 make up             # start kafka, postgres, otel collector
 make migrate        # apply database migrations
 make seed           # generate synthetic reference datasets
-make run            # start producer, agent, API, dashboard
+make run            # start the MCP tool servers and the agent/consumer
+make replay         # publish synthetic failures to Kafka (Python stand-in producer)
 ```
 
 Then open the Streamlit ops dashboard (default `http://localhost:8501`) and the
