@@ -30,7 +30,8 @@ test-unit:
 	@for p in $(PY_PROJECTS); do (cd $$p && uv run pytest -m "not integration" -q) || exit 1; done
 
 test:
-	cd agent-core && uv run pytest --cov --cov-report=term-missing -q
+	cd agent-core && uv run pytest --cov --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80 -q
+	python3 scripts/check_coverage.py agent-core/coverage.json --min 90
 	cd mcp-servers && uv run pytest --cov --cov-report=term-missing -q
 	cd producer-service && $(MVN) -q verify
 

@@ -19,6 +19,7 @@ dist/
 .coverage
 .coverage.*
 coverage.xml
+coverage.json
 htmlcov/
 
 # --- Java / Maven ---
@@ -36,3 +37,6 @@ target/
 *.log
 tmp/
 .claude/settings.local.json
+
+# --- local agent guide (kept on disk, not published) ---
+CLAUDE.md

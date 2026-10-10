@@ -100,6 +100,15 @@ class CaseRepository:
             raise CaseNotFoundError(str(case_id))
         return _case(row)
 
+    async def get_for_update(self, case_id: UUID) -> Case:
+        """Read a case under a row lock. Always take this BEFORE locking child rows."""
+        row = (
+            await self._s.execute(select(CaseRow).where(CaseRow.id == case_id).with_for_update())
+        ).scalar_one_or_none()
+        if row is None:
+            raise CaseNotFoundError(str(case_id))
+        return _case(row)
+
     async def list_by_status(self, status: CaseStatus, limit: int = 100) -> list[Case]:
         stmt = (
             select(CaseRow)
@@ -240,6 +249,12 @@ class ApprovalRepository:
         if row is None:
             raise ApprovalNotFoundError(str(approval_id))
         return _approval(row)
+
+    async def get_by_case(self, case_id: UUID) -> Approval | None:
+        row = (
+            await self._s.execute(select(ApprovalRow).where(ApprovalRow.case_id == case_id))
+        ).scalar_one_or_none()
+        return _approval(row) if row else None
 
     async def list_by_status(self, status: ApprovalStatus, limit: int = 100) -> list[Approval]:
         stmt = (

@@ -63,12 +63,15 @@ ALLOWED_TRANSITIONS: Final = MappingProxyType(
             {CaseStatus.RESOLVED, CaseStatus.ESCALATED, CaseStatus.FAILED}
         ),
         CaseStatus.AUTO_RESOLVED: frozenset(),
-        CaseStatus.RESOLVED: frozenset(),
+        CaseStatus.RESOLVED: frozenset({CaseStatus.ESCALATED}),  # only via a reversal
         CaseStatus.ESCALATED: frozenset(),
         CaseStatus.FAILED: frozenset(),
     }
 )
-"""Legal status transitions. Terminal states map to an empty set."""
+"""Legal status transitions. Terminal states map to an empty set.
+
+A resolved write remediation can be reversed, which reopens the case as ESCALATED.
+"""
 
 
 class InvalidTransitionError(ValueError):

@@ -20,7 +20,10 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy .
-      - run: uv run pytest --cov --cov-fail-under=80 -q
+      - run: uv run pytest --cov --cov-report=json:coverage.json --cov-fail-under=80 -q
+      - name: Safety-critical coverage gate (>=90% on gate, domain, remediation, consumer)
+        if: matrix.project == 'agent-core'
+        run: python3 ../scripts/check_coverage.py coverage.json --min 90
       - run: uvx pip-audit --strict || true # TODO: make blocking once baseline is clean
 
   java:

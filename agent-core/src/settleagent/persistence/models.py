@@ -69,3 +69,19 @@ class ToolCallRow(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
     ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SettlementActionRow(Base):
+    """Ledger of state changes applied to the SYNTHETIC settlement system (append-only rows;
+    ``reversed_at`` is the only field that may change)."""
+
+    __tablename__ = "settlement_actions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    case_id: Mapped[UUID] = mapped_column(ForeignKey("cases.id"), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    parameters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    inverse: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

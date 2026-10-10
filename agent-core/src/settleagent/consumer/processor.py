@@ -30,6 +30,9 @@ from settleagent.persistence.repositories import (
     CaseRepository,
     ToolCallRepository,
 )
+from settleagent.remediation.models import FixNotExecutableError
+from settleagent.remediation.resolve import resolve_write_fix
+from settleagent.remediation.service import record_read_only_resolution
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +112,7 @@ class CaseProcessor:
             log.exception("case %s investigation crashed", case_id)
             return await self._fail(case_id, exc)
         try:
-            return await self._complete(case_id, run, trace_id)
+            return await self._complete(case_id, case.event, run, trace_id)
         except InvalidTransitionError:
             log.warning("case %s was finished concurrently; ignoring duplicate run", case_id)
             async with self._sessions() as session:
@@ -128,11 +131,21 @@ class CaseProcessor:
             )
         return case
 
-    async def _complete(self, case_id: UUID, run: AgentRun, trace_id: str) -> Case:
+    async def _complete(
+        self, case_id: UUID, event: SettlementFailureEvent, run: AgentRun, trace_id: str
+    ) -> Case:
         result = run.result
         decision, reason = route_with_reason(result, self._policy)
         fix = result.proposed_fix
         now = self._clock()
+
+        # A write fix is only offered for approval if it can be re-derived from the case's own
+        # evidence (right trade, supported values). Otherwise a human handles it instead.
+        if decision is Decision.AUTO_RESOLVE and fix is not None and fix.requires_write:
+            try:
+                resolve_write_fix(event, result)
+            except FixNotExecutableError as exc:
+                decision, reason = Decision.HUMAN_REVIEW, f"write fix not executable: {exc}"
 
         # Defence in depth: a write fix NEVER skips the approval gate, whatever the router said.
         needs_approval = (
@@ -198,6 +211,8 @@ class CaseProcessor:
                     now,
                 )
             else:
+                if fix is not None and decision is Decision.AUTO_RESOLVE:
+                    await record_read_only_resolution(audit, case_id, fix, now)
                 await audit.append(case_id, ActorType.SYSTEM, action, {"status": target.value}, now)
         log.info(
             "case %s -> %s (decision=%s, confidence=%.2f)",

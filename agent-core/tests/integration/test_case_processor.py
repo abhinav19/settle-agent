@@ -1,57 +1,36 @@
 """CaseProcessor against real Postgres + real MCP servers; the LLM is an oracle double."""
 
 import asyncio
-from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from settleagent.agent.graph import InvestigationAgent
-from settleagent.agent.nodes import AgentConfig
 from settleagent.consumer.processor import CaseProcessor
 from settleagent.domain.case import ApprovalStatus, CaseStatus, Decision
 from settleagent.domain.reason_codes import ToolName
 from settleagent.gate.policy import default_policy
 from settleagent.persistence.repositories import (
     ApprovalRepository,
-    AuditRepository,
     CaseRepository,
     ToolCallRepository,
 )
 from settleagent.tools.gateway import McpToolGateway
-from tests.doubles import DownLlm, RoutedLlm, fresh_event, oracle_reply, pick, real_gateway
+from tests.doubles import DownLlm, RoutedLlm, fresh_event, oracle_reply, pick
+from tests.integration.helpers import (
+    NOW,
+    audit_actions,
+    load_case,
+    make_processor,
+    process_scenario,
+)
 
 pytestmark = pytest.mark.integration
-NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
 
-def processor(
-    sessions: async_sessionmaker[AsyncSession],
-    llm: Any,
-    gateway: Any = None,
-    threshold: float = 0.9,
-) -> CaseProcessor:
-    agent = InvestigationAgent(llm, gateway or real_gateway(), AgentConfig())
-    return CaseProcessor(sessions, agent, default_policy(threshold), clock=lambda: NOW)
-
-
-async def process(proc: CaseProcessor, scenario: Any) -> UUID:
-    case, created = await proc.intake(fresh_event(scenario))
-    assert created
-    await proc.investigate(case.id)
-    return case.id
-
-
-async def audit_actions(sessions: async_sessionmaker[AsyncSession], case_id: UUID) -> list[str]:
-    async with sessions() as s:
-        return [e.action for e in await AuditRepository(s).list_for_case(case_id)]
-
-
-async def load(sessions: async_sessionmaker[AsyncSession], case_id: UUID):  # type: ignore[no-untyped-def]
-    async with sessions() as s:
-        return await CaseRepository(s).get(case_id)
+processor = make_processor
+process = process_scenario
+load = load_case
 
 
 async def test_high_confidence_write_fix_parks_in_awaiting_approval(
