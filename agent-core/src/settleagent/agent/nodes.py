@@ -109,6 +109,7 @@ class InvestigationNodes:
         pending = seed_plan(event)
         notes = [f"prompt_version={prompts.PROMPT_VERSION}"]
         steps, tokens, model = state["steps_used"], state["tokens"], state["model"]
+        tok_in, tok_out = state["input_tokens"], state["output_tokens"]
 
         if self._cfg.llm_plan_refine and steps < self._cfg.max_steps - TOOL_RESERVE:
             steps += 1
@@ -122,6 +123,8 @@ class InvestigationNodes:
                 notes.append(f"plan refinement skipped: {exc}")
             else:
                 tokens += reply.total_tokens
+                tok_in += reply.input_tokens
+                tok_out += reply.output_tokens
                 model = reply.model
                 extras = _suggestions(
                     reply.data.get("extra_calls"),
@@ -135,6 +138,8 @@ class InvestigationNodes:
             "pending": pending,
             "steps_used": steps,
             "tokens": tokens,
+            "input_tokens": tok_in,
+            "output_tokens": tok_out,
             "model": model,
             "notes": state["notes"] + notes,
         }
@@ -221,6 +226,8 @@ class InvestigationNodes:
             "steps_used": steps,
             "analyze_rounds": rounds,
             "tokens": state["tokens"] + reply.total_tokens,
+            "input_tokens": state["input_tokens"] + reply.input_tokens,
+            "output_tokens": state["output_tokens"] + reply.output_tokens,
             "model": reply.model,
             "hypothesis": str(reply.data.get("hypothesis", "")),
             "pending": new_calls,
@@ -231,6 +238,7 @@ class InvestigationNodes:
     async def synthesize(self, state: InvestigationState) -> dict[str, Any]:
         notes = list(state["notes"])
         steps, tokens, model = state["steps_used"], state["tokens"], state["model"]
+        tok_in, tok_out = state["input_tokens"], state["output_tokens"]
 
         def fallback(reason: str) -> dict[str, Any]:
             notes.append(f"escalated: {reason}")
@@ -244,6 +252,8 @@ class InvestigationNodes:
                 ),
                 "steps_used": steps,
                 "tokens": tokens,
+                "input_tokens": tok_in,
+                "output_tokens": tok_out,
                 "model": model,
                 "notes": notes,
             }
@@ -267,6 +277,8 @@ class InvestigationNodes:
             except LlmError as exc:
                 return fallback(f"llm unavailable: {exc}")
             tokens += reply.total_tokens
+            tok_in += reply.input_tokens
+            tok_out += reply.output_tokens
             model = reply.model
             try:
                 result, adjustments = build_result(
@@ -294,6 +306,8 @@ class InvestigationNodes:
                 "result": result,
                 "steps_used": steps,
                 "tokens": tokens,
+                "input_tokens": tok_in,
+                "output_tokens": tok_out,
                 "model": model,
                 "notes": notes + adjustments,
             }

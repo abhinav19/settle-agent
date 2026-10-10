@@ -1,6 +1,6 @@
-.PHONY: up down install migrate run replay test test-unit lint eval seed
+.PHONY: up down install migrate run replay demo-data test test-unit lint eval seed
 
-PY_PROJECTS := agent-core mcp-servers
+PY_PROJECTS := agent-core mcp-servers dashboard
 MVN := ./mvnw
 
 up:
@@ -23,6 +23,9 @@ migrate:
 run:
 	./scripts/run.sh
 
+demo-data:
+	cd agent-core && uv run python scripts/demo_data.py --count 12
+
 replay:
 	cd agent-core && uv run python -m settleagent.replay.producer --limit 20
 
@@ -33,6 +36,7 @@ test:
 	cd agent-core && uv run pytest --cov --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80 -q
 	python3 scripts/check_coverage.py agent-core/coverage.json --min 90
 	cd mcp-servers && uv run pytest --cov --cov-report=term-missing -q
+	cd dashboard && uv run pytest --cov --cov-report=term-missing -q
 	cd producer-service && $(MVN) -q verify
 
 lint:

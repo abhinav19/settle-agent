@@ -47,6 +47,8 @@ class InvestigationState(TypedDict):
     sufficient: bool
     budget_exhausted: bool
     tokens: int
+    input_tokens: int
+    output_tokens: int
     model: str
     notes: list[str]
     result: InvestigationResult | None
@@ -70,6 +72,8 @@ def initial_state(
         sufficient=False,
         budget_exhausted=False,
         tokens=0,
+        input_tokens=0,
+        output_tokens=0,
         model="none",
         notes=[],
         result=None,

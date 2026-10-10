@@ -1,5 +1,6 @@
 """Shared helpers for integration tests (Postgres + real in-process MCP tools)."""
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -22,9 +23,10 @@ def make_processor(
     llm: Any,
     gateway: Any = None,
     threshold: float = 0.9,
+    clock: Callable[[], datetime] | None = None,
 ) -> CaseProcessor:
     agent = InvestigationAgent(llm, gateway or real_gateway(), AgentConfig())
-    return CaseProcessor(sessions, agent, default_policy(threshold), clock=lambda: NOW)
+    return CaseProcessor(sessions, agent, default_policy(threshold), clock=clock or (lambda: NOW))
 
 
 async def process_scenario(proc: CaseProcessor, scenario: Any) -> UUID:

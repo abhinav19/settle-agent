@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     cost_ceiling_usd: float = Field(default=50.0, gt=0)
 
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
+    otel_enabled: bool = True
+    otel_metric_interval_ms: int = Field(default=10_000, ge=1000)
+    ready_requires_otel: bool = True
+    log_level: str = "INFO"
+    log_json: bool = True
+    per_case_cost_alert_usd: float = Field(default=1.0, gt=0)
+    budget_warn_fraction: float = Field(default=0.8, gt=0, le=1.0)
 
 
 @lru_cache

@@ -1,0 +1,1991 @@
+{
+ "components": {
+  "schemas": {
+   "ActionResponse": {
+    "additionalProperties": false,
+    "properties": {
+     "approval": {
+      "$ref": "#/components/schemas/Approval"
+     },
+     "case": {
+      "$ref": "#/components/schemas/CaseSummary"
+     },
+     "changed": {
+      "description": "False when the call was an idempotent replay",
+      "title": "Changed",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "changed",
+     "case",
+     "approval"
+    ],
+    "title": "ActionResponse",
+    "type": "object"
+   },
+   "ActorType": {
+    "description": "Who performed an audited action.",
+    "enum": [
+     "agent",
+     "system",
+     "user"
+    ],
+    "title": "ActorType",
+    "type": "string"
+   },
+   "Approval": {
+    "additionalProperties": false,
+    "description": "Approval request for a ``requires_write`` fix.",
+    "properties": {
+     "case_id": {
+      "format": "uuid",
+      "title": "Case Id",
+      "type": "string"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "decided_at": {
+      "anyOf": [
+       {
+        "format": "date-time",
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decided At"
+     },
+     "decided_by": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Decided By"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "proposed_fix": {
+      "$ref": "#/components/schemas/ProposedFix"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ApprovalStatus"
+     }
+    },
+    "required": [
+     "id",
+     "case_id",
+     "status",
+     "proposed_fix",
+     "created_at"
+    ],
+    "title": "Approval",
+    "type": "object"
+   },
+   "ApprovalItem": {
+    "additionalProperties": false,
+    "properties": {
+     "approval": {
+      "$ref": "#/components/schemas/Approval"
+     },
+     "case": {
+      "$ref": "#/components/schemas/CaseSummary"
+     }
+    },
+    "required": [
+     "approval",
+     "case"
+    ],
+    "title": "ApprovalItem",
+    "type": "object"
+   },
+   "ApprovalStatus": {
+    "description": "State of an approval request for a write fix.",
+    "enum": [
+     "PENDING",
+     "APPROVED",
+     "REJECTED"
+    ],
+    "title": "ApprovalStatus",
+    "type": "string"
+   },
+   "AuditEvent": {
+    "additionalProperties": false,
+    "description": "Immutable audit record (append-only).",
+    "properties": {
+     "action": {
+      "minLength": 1,
+      "title": "Action",
+      "type": "string"
+     },
+     "actor": {
+      "$ref": "#/components/schemas/ActorType"
+     },
+     "actor_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Actor Id"
+     },
+     "case_id": {
+      "format": "uuid",
+      "title": "Case Id",
+      "type": "string"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+     },
+     "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+     }
+    },
+    "required": [
+     "case_id",
+     "actor",
+     "action",
+     "payload",
+     "ts"
+    ],
+    "title": "AuditEvent",
+    "type": "object"
+   },
+   "BudgetStatus": {
+    "additionalProperties": false,
+    "properties": {
+     "ceiling_usd": {
+      "title": "Ceiling Usd",
+      "type": "number"
+     },
+     "level": {
+      "description": "ok | warning (>= warn fraction) | exceeded (>= ceiling)",
+      "title": "Level",
+      "type": "string"
+     },
+     "used_fraction": {
+      "title": "Used Fraction",
+      "type": "number"
+     },
+     "used_usd": {
+      "title": "Used Usd",
+      "type": "number"
+     }
+    },
+    "required": [
+     "ceiling_usd",
+     "used_usd",
+     "used_fraction",
+     "level"
+    ],
+    "title": "BudgetStatus",
+    "type": "object"
+   },
+   "Case": {
+    "additionalProperties": false,
+    "description": "A settlement-failure case and its investigation outcome.",
+    "properties": {
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "decision": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Decision"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "event": {
+      "$ref": "#/components/schemas/SettlementFailureEvent"
+     },
+     "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "result": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/InvestigationResult"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "status": {
+      "$ref": "#/components/schemas/CaseStatus"
+     },
+     "trace_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trace Id"
+     },
+     "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "event_id",
+     "status",
+     "event",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "Case",
+    "type": "object"
+   },
+   "CaseDetail": {
+    "additionalProperties": false,
+    "description": "Everything an operator needs: event, agent result with evidence, fix, trail.",
+    "properties": {
+     "approval": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Approval"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "audit": {
+      "items": {
+       "$ref": "#/components/schemas/AuditEvent"
+      },
+      "title": "Audit",
+      "type": "array"
+     },
+     "case": {
+      "$ref": "#/components/schemas/Case"
+     },
+     "summary": {
+      "$ref": "#/components/schemas/CaseSummary"
+     },
+     "tool_calls": {
+      "items": {
+       "$ref": "#/components/schemas/ToolCallRecord"
+      },
+      "title": "Tool Calls",
+      "type": "array"
+     },
+     "usage": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/CaseUsage"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Tokens, USD cost and latency of the investigation"
+     }
+    },
+    "required": [
+     "summary",
+     "case",
+     "approval",
+     "audit",
+     "tool_calls",
+     "usage"
+    ],
+    "title": "CaseDetail",
+    "type": "object"
+   },
+   "CaseSort": {
+    "description": "Sortable columns for case listings (ops queue: by age or by confidence).",
+    "enum": [
+     "created_at",
+     "updated_at",
+     "confidence"
+    ],
+    "title": "CaseSort",
+    "type": "string"
+   },
+   "CaseStatus": {
+    "description": "Case lifecycle; legal moves are defined in ``ALLOWED_TRANSITIONS``.",
+    "enum": [
+     "RECEIVED",
+     "INVESTIGATING",
+     "AUTO_RESOLVED",
+     "AWAITING_APPROVAL",
+     "RESOLVED",
+     "ESCALATED",
+     "FAILED"
+    ],
+    "title": "CaseStatus",
+    "type": "string"
+   },
+   "CaseSummary": {
+    "additionalProperties": false,
+    "description": "One row of the ops queue.",
+    "properties": {
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Agent's root-cause category, once investigated",
+      "title": "Category"
+     },
+     "confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Confidence"
+     },
+     "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+     },
+     "decision": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/Decision"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+     },
+     "fix_action": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fix Action"
+     },
+     "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+     },
+     "isin": {
+      "title": "Isin",
+      "type": "string"
+     },
+     "reason_code": {
+      "title": "Reason Code",
+      "type": "string"
+     },
+     "requires_write": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Requires Write"
+     },
+     "root_cause": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Root Cause"
+     },
+     "status": {
+      "$ref": "#/components/schemas/CaseStatus"
+     },
+     "trace_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trace Id"
+     },
+     "trade_id": {
+      "title": "Trade Id",
+      "type": "string"
+     },
+     "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "event_id",
+     "status",
+     "decision",
+     "trade_id",
+     "isin",
+     "reason_code",
+     "category",
+     "root_cause",
+     "confidence",
+     "fix_action",
+     "requires_write",
+     "trace_id",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "CaseSummary",
+    "type": "object"
+   },
+   "CaseUsage": {
+    "additionalProperties": false,
+    "description": "What the investigation cost (from the audit trail). Fields are null for older cases.",
+    "properties": {
+     "cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Usd"
+     },
+     "duration_ms": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Duration Ms"
+     },
+     "input_tokens": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Input Tokens"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model"
+     },
+     "output_tokens": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Output Tokens"
+     },
+     "steps_used": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Steps Used"
+     }
+    },
+    "title": "CaseUsage",
+    "type": "object"
+   },
+   "CheckResultModel": {
+    "additionalProperties": false,
+    "properties": {
+     "detail": {
+      "title": "Detail",
+      "type": "string"
+     },
+     "latency_ms": {
+      "title": "Latency Ms",
+      "type": "integer"
+     },
+     "ok": {
+      "title": "Ok",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ok",
+     "detail",
+     "latency_ms"
+    ],
+    "title": "CheckResultModel",
+    "type": "object"
+   },
+   "Decision": {
+    "description": "Output of the deterministic confidence gate.",
+    "enum": [
+     "AUTO_RESOLVE",
+     "HUMAN_REVIEW"
+    ],
+    "title": "Decision",
+    "type": "string"
+   },
+   "DecisionRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "decided_by": {
+      "description": "Operator identity recorded in the audit trail",
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Decided By",
+      "type": "string"
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "maxLength": 1000,
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     }
+    },
+    "required": [
+     "decided_by"
+    ],
+    "title": "DecisionRequest",
+    "type": "object"
+   },
+   "ErrorResponse": {
+    "additionalProperties": false,
+    "properties": {
+     "detail": {
+      "title": "Detail",
+      "type": "string"
+     }
+    },
+    "required": [
+     "detail"
+    ],
+    "title": "ErrorResponse",
+    "type": "object"
+   },
+   "Evidence": {
+    "additionalProperties": false,
+    "description": "One finding, tied to the read-only tool that produced it.",
+    "properties": {
+     "raw": {
+      "additionalProperties": true,
+      "title": "Raw",
+      "type": "object"
+     },
+     "source": {
+      "$ref": "#/components/schemas/ToolName"
+     },
+     "statement": {
+      "minLength": 1,
+      "title": "Statement",
+      "type": "string"
+     }
+    },
+    "required": [
+     "source",
+     "statement",
+     "raw"
+    ],
+    "title": "Evidence",
+    "type": "object"
+   },
+   "FixAction": {
+    "description": "Remediation actions the agent may propose.",
+    "enum": [
+     "AMEND_SSI",
+     "RESUBMIT",
+     "PARTIAL_SETTLE",
+     "REBOOK_SETTLEMENT_DATE",
+     "CHASE_COUNTERPARTY",
+     "NO_ACTION"
+    ],
+    "title": "FixAction",
+    "type": "string"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "title": "Detail",
+      "type": "array"
+     }
+    },
+    "title": "HTTPValidationError",
+    "type": "object"
+   },
+   "HealthResponse": {
+    "additionalProperties": false,
+    "properties": {
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status"
+    ],
+    "title": "HealthResponse",
+    "type": "object"
+   },
+   "InvestigationResult": {
+    "additionalProperties": false,
+    "description": "Structured, evidence-backed root cause with a confidence score.",
+    "properties": {
+     "case_id": {
+      "format": "uuid",
+      "title": "Case Id",
+      "type": "string"
+     },
+     "confidence": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+     },
+     "evidence": {
+      "items": {
+       "$ref": "#/components/schemas/Evidence"
+      },
+      "title": "Evidence",
+      "type": "array"
+     },
+     "model": {
+      "minLength": 1,
+      "title": "Model",
+      "type": "string"
+     },
+     "proposed_fix": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ProposedFix"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "reason_category": {
+      "$ref": "#/components/schemas/ReasonCategory"
+     },
+     "reasoning_trace_id": {
+      "minLength": 1,
+      "title": "Reasoning Trace Id",
+      "type": "string"
+     },
+     "root_cause": {
+      "minLength": 1,
+      "title": "Root Cause",
+      "type": "string"
+     },
+     "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "tokens_used": {
+      "minimum": 0.0,
+      "title": "Tokens Used",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "schema_version",
+     "case_id",
+     "root_cause",
+     "reason_category",
+     "evidence",
+     "proposed_fix",
+     "confidence",
+     "model",
+     "tokens_used",
+     "reasoning_trace_id"
+    ],
+    "title": "InvestigationResult",
+    "type": "object"
+   },
+   "MetricsResponse": {
+    "additionalProperties": false,
+    "properties": {
+     "auto_resolve_decisions": {
+      "title": "Auto Resolve Decisions",
+      "type": "integer"
+     },
+     "auto_resolve_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "auto-resolve decisions / decided cases",
+      "title": "Auto Resolve Rate"
+     },
+     "average_confidence": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Confidence"
+     },
+     "average_cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Average Cost Usd"
+     },
+     "budget": {
+      "$ref": "#/components/schemas/BudgetStatus"
+     },
+     "by_status": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "title": "By Status",
+      "type": "object"
+     },
+     "decided_cases": {
+      "description": "Cases the confidence gate has routed",
+      "title": "Decided Cases",
+      "type": "integer"
+     },
+     "investigations": {
+      "title": "Investigations",
+      "type": "integer"
+     },
+     "p50_run_latency_ms": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P50 Run Latency Ms"
+     },
+     "p95_run_latency_ms": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "P95 Run Latency Ms"
+     },
+     "pending_approvals": {
+      "title": "Pending Approvals",
+      "type": "integer"
+     },
+     "queue_depth": {
+      "description": "ESCALATED + AWAITING_APPROVAL: cases needing a human",
+      "title": "Queue Depth",
+      "type": "integer"
+     },
+     "tool_calls": {
+      "title": "Tool Calls",
+      "type": "integer"
+     },
+     "tool_error_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tool Error Rate"
+     },
+     "tool_infra_failures": {
+      "description": "Timeouts, outages, open circuits (not 'not found')",
+      "title": "Tool Infra Failures",
+      "type": "integer"
+     },
+     "total_cases": {
+      "title": "Total Cases",
+      "type": "integer"
+     },
+     "total_cost_usd": {
+      "title": "Total Cost Usd",
+      "type": "number"
+     },
+     "total_tokens": {
+      "description": "LLM tokens spent across all investigations",
+      "title": "Total Tokens",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "total_cases",
+     "by_status",
+     "queue_depth",
+     "pending_approvals",
+     "decided_cases",
+     "auto_resolve_decisions",
+     "auto_resolve_rate",
+     "average_confidence",
+     "total_tokens",
+     "investigations",
+     "p50_run_latency_ms",
+     "p95_run_latency_ms",
+     "tool_calls",
+     "tool_infra_failures",
+     "tool_error_rate",
+     "total_cost_usd",
+     "average_cost_usd",
+     "budget"
+    ],
+    "title": "MetricsResponse",
+    "type": "object"
+   },
+   "Page_ApprovalItem_": {
+    "additionalProperties": false,
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/ApprovalItem"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "limit": {
+      "title": "Limit",
+      "type": "integer"
+     },
+     "offset": {
+      "title": "Offset",
+      "type": "integer"
+     },
+     "total": {
+      "description": "Total rows matching the filter, across all pages",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "items",
+     "total",
+     "limit",
+     "offset"
+    ],
+    "title": "Page[ApprovalItem]",
+    "type": "object"
+   },
+   "Page_CaseSummary_": {
+    "additionalProperties": false,
+    "properties": {
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/CaseSummary"
+      },
+      "title": "Items",
+      "type": "array"
+     },
+     "limit": {
+      "title": "Limit",
+      "type": "integer"
+     },
+     "offset": {
+      "title": "Offset",
+      "type": "integer"
+     },
+     "total": {
+      "description": "Total rows matching the filter, across all pages",
+      "title": "Total",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "items",
+     "total",
+     "limit",
+     "offset"
+    ],
+    "title": "Page[CaseSummary]",
+    "type": "object"
+   },
+   "ProposedFix": {
+    "additionalProperties": false,
+    "description": "A remediation proposal. ``requires_write`` fixes always need approval.",
+    "properties": {
+     "action": {
+      "$ref": "#/components/schemas/FixAction"
+     },
+     "parameters": {
+      "additionalProperties": true,
+      "title": "Parameters",
+      "type": "object"
+     },
+     "requires_write": {
+      "title": "Requires Write",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "action",
+     "parameters",
+     "requires_write"
+    ],
+    "title": "ProposedFix",
+    "type": "object"
+   },
+   "ReadyResponse": {
+    "additionalProperties": false,
+    "properties": {
+     "checks": {
+      "additionalProperties": {
+       "$ref": "#/components/schemas/CheckResultModel"
+      },
+      "title": "Checks",
+      "type": "object"
+     },
+     "status": {
+      "title": "Status",
+      "type": "string"
+     }
+    },
+    "required": [
+     "status",
+     "checks"
+    ],
+    "title": "ReadyResponse",
+    "type": "object"
+   },
+   "ReasonCategory": {
+    "description": "Deterministic grouping of reason codes (and the agent's conclusion).",
+    "enum": [
+     "INVENTORY",
+     "FUNDING",
+     "MATCHING",
+     "COUNTERPARTY",
+     "STATIC_DATA",
+     "QUANTITY",
+     "TIMING",
+     "CALENDAR",
+     "UNDETERMINED"
+    ],
+    "title": "ReasonCategory",
+    "type": "string"
+   },
+   "ReasonCode": {
+    "description": "Failure reason carried on the settlement status message.",
+    "enum": [
+     "LACK",
+     "MONY",
+     "NMAT",
+     "CMIS",
+     "SSIM",
+     "DENO",
+     "LATE",
+     "CALD"
+    ],
+    "title": "ReasonCode",
+    "type": "string"
+   },
+   "SettlementFailureEvent": {
+    "additionalProperties": false,
+    "description": "A settlement-failure status message (modeled on semt.018 / MT548).",
+    "properties": {
+     "cash_amount": {
+      "title": "Cash Amount",
+      "type": "string"
+     },
+     "counterparty_bic": {
+      "pattern": "^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$",
+      "title": "Counterparty Bic",
+      "type": "string"
+     },
+     "currency": {
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+     },
+     "emitted_at": {
+      "format": "date-time",
+      "title": "Emitted At",
+      "type": "string"
+     },
+     "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+     },
+     "isin": {
+      "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$",
+      "title": "Isin",
+      "type": "string"
+     },
+     "quantity": {
+      "title": "Quantity",
+      "type": "string"
+     },
+     "raw_message": {
+      "minLength": 1,
+      "title": "Raw Message",
+      "type": "string"
+     },
+     "reason_code": {
+      "$ref": "#/components/schemas/ReasonCode"
+     },
+     "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+     },
+     "settlement_date": {
+      "format": "date",
+      "title": "Settlement Date",
+      "type": "string"
+     },
+     "trade_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Trade Id",
+      "type": "string"
+     }
+    },
+    "required": [
+     "schema_version",
+     "event_id",
+     "emitted_at",
+     "trade_id",
+     "isin",
+     "settlement_date",
+     "counterparty_bic",
+     "reason_code",
+     "quantity",
+     "cash_amount",
+     "currency",
+     "raw_message"
+    ],
+    "title": "SettlementFailureEvent",
+    "type": "object"
+   },
+   "ToolCallRecord": {
+    "additionalProperties": false,
+    "description": "Audit of one MCP tool call.",
+    "properties": {
+     "case_id": {
+      "format": "uuid",
+      "title": "Case Id",
+      "type": "string"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Error"
+     },
+     "id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Id"
+     },
+     "latency_ms": {
+      "minimum": 0.0,
+      "title": "Latency Ms",
+      "type": "integer"
+     },
+     "request": {
+      "additionalProperties": true,
+      "title": "Request",
+      "type": "object"
+     },
+     "response": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Response"
+     },
+     "tool": {
+      "$ref": "#/components/schemas/ToolName"
+     },
+     "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+     }
+    },
+    "required": [
+     "case_id",
+     "tool",
+     "request",
+     "response",
+     "latency_ms",
+     "ts"
+    ],
+    "title": "ToolCallRecord",
+    "type": "object"
+   },
+   "ToolName": {
+    "description": "The four read-only MCP tool servers.",
+    "enum": [
+     "security-master",
+     "ssi-store",
+     "holiday-calendar",
+     "trade-store"
+    ],
+    "title": "ToolName",
+    "type": "string"
+   },
+   "ValidationError": {
+    "properties": {
+     "ctx": {
+      "title": "Context",
+      "type": "object"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "title": "Location",
+      "type": "array"
+     },
+     "msg": {
+      "title": "Message",
+      "type": "string"
+     },
+     "type": {
+      "title": "Error Type",
+      "type": "string"
+     }
+    },
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError",
+    "type": "object"
+   }
+  },
+  "securitySchemes": {
+   "APIKeyHeader": {
+    "description": "Control-plane API key",
+    "in": "header",
+    "name": "X-API-Key",
+    "type": "apiKey"
+   }
+  }
+ },
+ "info": {
+  "description": "Cases, approvals and metrics for the settlement-failure agent. All endpoints except /health and /ready require the `X-API-Key` header.",
+  "title": "SettleAgent control plane",
+  "version": "1.0.0"
+ },
+ "openapi": "3.1.0",
+ "paths": {
+  "/approvals": {
+   "get": {
+    "operationId": "list_approvals_approvals_get",
+    "parameters": [
+     {
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "$ref": "#/components/schemas/ApprovalStatus"
+        },
+        {
+         "const": "ALL",
+         "type": "string"
+        }
+       ],
+       "default": "PENDING",
+       "title": "Status"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Page_ApprovalItem_"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "List approvals",
+    "tags": [
+     "approvals"
+    ]
+   }
+  },
+  "/approvals/{approval_id}/approve": {
+   "post": {
+    "operationId": "approve_approvals__approval_id__approve_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "approval_id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "title": "Approval Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecisionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Approval not found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Conflicting decision or case state"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Settlement system unavailable; retry"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "Approve and execute the proposed fix (idempotent)",
+    "tags": [
+     "approvals"
+    ]
+   }
+  },
+  "/approvals/{approval_id}/reject": {
+   "post": {
+    "operationId": "reject_approvals__approval_id__reject_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "approval_id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "title": "Approval Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecisionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Approval not found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Conflicting decision or case state"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Settlement system unavailable; retry"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "Reject the proposed fix; the case goes to the human queue (idempotent)",
+    "tags": [
+     "approvals"
+    ]
+   }
+  },
+  "/approvals/{approval_id}/reverse": {
+   "post": {
+    "operationId": "reverse_approvals__approval_id__reverse_post",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "approval_id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "title": "Approval Id",
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/DecisionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ActionResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Approval not found"
+     },
+     "409": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Conflicting decision or case state"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Settlement system unavailable; retry"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "Reverse an executed fix and reopen the case (idempotent)",
+    "tags": [
+     "approvals"
+    ]
+   }
+  },
+  "/cases": {
+   "get": {
+    "operationId": "list_cases_cases_get",
+    "parameters": [
+     {
+      "description": "Repeat to filter",
+      "in": "query",
+      "name": "status",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/components/schemas/CaseStatus"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "Repeat to filter",
+       "title": "Status"
+      }
+     },
+     {
+      "description": "Only cases needing a human",
+      "in": "query",
+      "name": "queue",
+      "required": false,
+      "schema": {
+       "default": false,
+       "description": "Only cases needing a human",
+       "title": "Queue",
+       "type": "boolean"
+      }
+     },
+     {
+      "in": "query",
+      "name": "reason_code",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Reason Code"
+      }
+     },
+     {
+      "in": "query",
+      "name": "sort",
+      "required": false,
+      "schema": {
+       "$ref": "#/components/schemas/CaseSort",
+       "default": "created_at"
+      }
+     },
+     {
+      "in": "query",
+      "name": "order",
+      "required": false,
+      "schema": {
+       "default": "desc",
+       "enum": [
+        "asc",
+        "desc"
+       ],
+       "title": "Order",
+       "type": "string"
+      }
+     },
+     {
+      "in": "query",
+      "name": "limit",
+      "required": false,
+      "schema": {
+       "default": 50,
+       "maximum": 200,
+       "minimum": 1,
+       "title": "Limit",
+       "type": "integer"
+      }
+     },
+     {
+      "in": "query",
+      "name": "offset",
+      "required": false,
+      "schema": {
+       "default": 0,
+       "minimum": 0,
+       "title": "Offset",
+       "type": "integer"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Page_CaseSummary_"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "List cases",
+    "tags": [
+     "cases"
+    ]
+   }
+  },
+  "/cases/{case_id}": {
+   "get": {
+    "operationId": "get_case_cases__case_id__get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "case_id",
+      "required": true,
+      "schema": {
+       "format": "uuid",
+       "title": "Case Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CaseDetail"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Case not found"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "Case with evidence, fix, approval and audit trail",
+    "tags": [
+     "cases"
+    ]
+   }
+  },
+  "/health": {
+   "get": {
+    "operationId": "health_health_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HealthResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     }
+    },
+    "summary": "Liveness",
+    "tags": [
+     "ops"
+    ]
+   }
+  },
+  "/metrics/summary": {
+   "get": {
+    "operationId": "metrics_summary_metrics_summary_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MetricsResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ErrorResponse"
+        }
+       }
+      },
+      "description": "Missing or invalid API key"
+     }
+    },
+    "security": [
+     {
+      "APIKeyHeader": []
+     }
+    ],
+    "summary": "Operational KPIs",
+    "tags": [
+     "metrics"
+    ]
+   }
+  },
+  "/ready": {
+   "get": {
+    "operationId": "ready_ready_get",
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReadyResponse"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ReadyResponse"
+        }
+       }
+      },
+      "description": "A dependency is unavailable"
+     }
+    },
+    "summary": "Readiness: database, Kafka and the OTel collector are reachable",
+    "tags": [
+     "ops"
+    ]
+   }
+  }
+ }
+}

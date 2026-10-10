@@ -12,14 +12,22 @@ processors:
 exporters:
   debug:
     verbosity: basic
+  # traces -> Jaeger (UI: http://localhost:16686)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # metrics -> scrape endpoint (curl http://localhost:8889/metrics)
+  prometheus:
+    endpoint: 0.0.0.0:8889
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [otlp/jaeger, debug]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [prometheus, debug]

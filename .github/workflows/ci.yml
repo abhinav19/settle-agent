@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        project: [agent-core, mcp-servers]
+        project: [agent-core, mcp-servers, dashboard]
     defaults:
       run:
         working-directory: ${{ matrix.project }}

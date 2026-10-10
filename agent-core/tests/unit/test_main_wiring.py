@@ -3,6 +3,7 @@ import pytest
 from settleagent.config import Settings
 from settleagent.domain.reason_codes import ToolName
 from settleagent.main import build_agent, build_app, build_gateway
+from settleagent.observability.telemetry import NOOP
 
 
 @pytest.fixture
@@ -23,10 +24,10 @@ def test_gateway_has_an_endpoint_for_every_tool_server(settings: Settings) -> No
 
 
 def test_agent_is_built_from_settings(settings: Settings) -> None:
-    assert build_agent(settings) is not None
+    assert build_agent(settings, NOOP) is not None
 
 
 async def test_app_builds_without_connecting(settings: Settings) -> None:
-    app = build_app(settings)
+    app = build_app(settings, NOOP)
     assert app.consumer.inflight == 0
     await app.engine.dispose()

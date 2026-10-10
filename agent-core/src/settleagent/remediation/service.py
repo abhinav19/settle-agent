@@ -10,7 +10,7 @@ Invariants (each has a test):
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -25,6 +25,8 @@ from settleagent.domain.case import (
     InvalidTransitionError,
 )
 from settleagent.domain.investigation import ProposedFix
+from settleagent.observability.logging import bind_case
+from settleagent.observability.telemetry import NOOP, Telemetry
 from settleagent.persistence.repositories import (
     ApprovalRepository,
     AuditRepository,
@@ -67,14 +69,67 @@ class RemediationService:
         system: SettlementSystem,
         *,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        telemetry: Telemetry = NOOP,
     ) -> None:
         self._sessions = sessions
         self._system = system
         self._clock = clock
+        self._telemetry = telemetry
+
+    async def _observed(
+        self,
+        action: str,
+        approval_id: UUID,
+        decided_by: str,
+        run: Awaitable[RemediationOutcome],
+    ) -> RemediationOutcome:
+        """One span + counter + case-bound log line per operator action."""
+        with self._telemetry.span(
+            f"remediation.{action}", approval_id=str(approval_id), decided_by=decided_by
+        ) as span:
+            try:
+                outcome = await run
+            except Exception as exc:
+                self._telemetry.remediation_actions.add(
+                    1, {"action": action, "outcome": f"error:{type(exc).__name__}"}
+                )
+                raise
+            span.set_attributes(
+                {
+                    "case_id": str(outcome.case.id),
+                    "case.status": outcome.case.status.value,
+                    "changed": outcome.changed,
+                }
+            )
+        self._telemetry.remediation_actions.add(
+            1,
+            {
+                "action": action,
+                "outcome": "applied" if outcome.changed else "replay",
+                "case_status": outcome.case.status.value,
+            },
+        )
+        with bind_case(outcome.case.id):
+            log.info(
+                "operator %s",
+                action,
+                extra={
+                    "approval_id": str(approval_id),
+                    "decided_by": decided_by,
+                    "changed": outcome.changed,
+                    "case_status": outcome.case.status.value,
+                },
+            )
+        return outcome
 
     # ----------------------------------------------------------------- approve
     async def approve(self, approval_id: UUID, decided_by: str) -> RemediationOutcome:
         """Approve and execute. Idempotent; resumes an interrupted approval."""
+        return await self._observed(
+            "approve", approval_id, decided_by, self._approve(approval_id, decided_by)
+        )
+
+    async def _approve(self, approval_id: UUID, decided_by: str) -> RemediationOutcome:
         now = self._clock()
         # Stage A — commit the decision (and nothing else) before touching the system.
         async with self._sessions() as session, session.begin():
@@ -182,6 +237,13 @@ class RemediationService:
         self, approval_id: UUID, decided_by: str, reason: str | None = None
     ) -> RemediationOutcome:
         """Reject: nothing is executed; the case goes to the human queue. Idempotent."""
+        return await self._observed(
+            "reject", approval_id, decided_by, self._reject(approval_id, decided_by, reason)
+        )
+
+    async def _reject(
+        self, approval_id: UUID, decided_by: str, reason: str | None
+    ) -> RemediationOutcome:
         now = self._clock()
         async with self._sessions() as session, session.begin():
             approvals, cases, audit = self._repos(session)
@@ -210,6 +272,13 @@ class RemediationService:
         self, approval_id: UUID, decided_by: str, reason: str | None = None
     ) -> RemediationOutcome:
         """Undo an executed remediation and reopen the case for a human. Idempotent."""
+        return await self._observed(
+            "reverse", approval_id, decided_by, self._reverse(approval_id, decided_by, reason)
+        )
+
+    async def _reverse(
+        self, approval_id: UUID, decided_by: str, reason: str | None
+    ) -> RemediationOutcome:
         async with self._sessions() as session:
             approval = await ApprovalRepository(session).get(approval_id)
             case = await CaseRepository(session).get(approval.case_id)

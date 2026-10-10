@@ -5,11 +5,12 @@ Time is always passed in (injectable clock) — repositories never read the wall
 
 from collections.abc import Sequence
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import Float, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,6 +68,14 @@ def _case(row: CaseRow) -> Case:
     )
 
 
+class CaseSort(StrEnum):
+    """Sortable columns for case listings (ops queue: by age or by confidence)."""
+
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+    CONFIDENCE = "confidence"
+
+
 class CaseRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._s = session
@@ -99,6 +108,46 @@ class CaseRepository:
         if row is None:
             raise CaseNotFoundError(str(case_id))
         return _case(row)
+
+    async def list_page(
+        self,
+        *,
+        statuses: Sequence[CaseStatus] | None = None,
+        reason_code: str | None = None,
+        sort: CaseSort = CaseSort.CREATED_AT,
+        descending: bool = True,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[Case], int]:
+        """A filtered, sorted page of cases plus the total matching count."""
+        conditions = []
+        if statuses:
+            conditions.append(CaseRow.status.in_([s.value for s in statuses]))
+        if reason_code:
+            conditions.append(CaseRow.event["reason_code"].astext == reason_code)
+        total = (
+            await self._s.execute(select(func.count()).select_from(CaseRow).where(*conditions))
+        ).scalar_one()
+        column = {
+            CaseSort.CREATED_AT: CaseRow.created_at,
+            CaseSort.UPDATED_AT: CaseRow.updated_at,
+            CaseSort.CONFIDENCE: cast(CaseRow.result["confidence"].astext, Float),
+        }[sort]
+        ordering = column.desc().nulls_last() if descending else column.asc().nulls_last()
+        stmt = (
+            select(CaseRow)
+            .where(*conditions)
+            .order_by(ordering, CaseRow.id)  # id: stable pagination on ties
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_case(r) for r in (await self._s.execute(stmt)).scalars()], int(total)
+
+    async def get_many(self, case_ids: Sequence[UUID]) -> dict[UUID, Case]:
+        if not case_ids:
+            return {}
+        rows = await self._s.execute(select(CaseRow).where(CaseRow.id.in_(list(case_ids))))
+        return {r.id: _case(r) for r in rows.scalars()}
 
     async def get_for_update(self, case_id: UUID) -> Case:
         """Read a case under a row lock. Always take this BEFORE locking child rows."""
@@ -255,6 +304,22 @@ class ApprovalRepository:
             await self._s.execute(select(ApprovalRow).where(ApprovalRow.case_id == case_id))
         ).scalar_one_or_none()
         return _approval(row) if row else None
+
+    async def list_page(
+        self, status: ApprovalStatus | None, limit: int = 50, offset: int = 0
+    ) -> tuple[list[Approval], int]:
+        conditions = [ApprovalRow.status == status.value] if status else []
+        total = (
+            await self._s.execute(select(func.count()).select_from(ApprovalRow).where(*conditions))
+        ).scalar_one()
+        stmt = (
+            select(ApprovalRow)
+            .where(*conditions)
+            .order_by(ApprovalRow.created_at, ApprovalRow.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_approval(r) for r in (await self._s.execute(stmt)).scalars()], int(total)
 
     async def list_by_status(self, status: ApprovalStatus, limit: int = 100) -> list[Approval]:
         stmt = (

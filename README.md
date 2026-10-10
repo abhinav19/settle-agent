@@ -82,10 +82,13 @@ make migrate        # apply database migrations
 make seed           # generate synthetic reference datasets
 make run            # start the MCP tool servers and the agent/consumer
 make replay         # publish synthetic failures to Kafka (Python stand-in producer)
+make demo-data      # (optional) seed demo cases without calling Claude — oracle, demo only
 ```
 
-Then open the Streamlit ops dashboard (default `http://localhost:8501`) and the
-FastAPI docs (`http://localhost:8000/docs`).
+Then open the Streamlit ops dashboard (default `http://localhost:8501`), the
+FastAPI docs (`http://localhost:8000/docs`), and Jaeger for traces (`http://localhost:16686`;
+the dashboard links each case to its trace). Metrics are scrapeable at
+`http://localhost:8889/metrics`.
 
 ```bash
 make test           # unit + integration tests with coverage gates

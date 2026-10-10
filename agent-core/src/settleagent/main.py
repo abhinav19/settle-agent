@@ -4,6 +4,7 @@ uv run python -m settleagent.main
 """
 
 import asyncio
+import contextlib
 import logging
 import signal
 from dataclasses import dataclass
@@ -24,16 +25,26 @@ from settleagent.consumer.processor import CaseProcessor
 from settleagent.consumer.service import EventIntake
 from settleagent.domain.reason_codes import ToolName
 from settleagent.gate.policy import default_policy
+from settleagent.observability.cost import CostTracker
+from settleagent.observability.instrumentation import TracedGateway, TracedLlm
+from settleagent.observability.logging import configure_logging
+from settleagent.observability.telemetry import Telemetry, setup_telemetry
 from settleagent.persistence.db import make_engine, make_session_factory
+from settleagent.persistence.metrics import compute_metrics, total_cost
 from settleagent.tools.gateway import ClientFactory, McpToolGateway
 
-log = logging.getLogger("settleagent")
+log = logging.getLogger("settleagent.main")
+
+
+GAUGE_REFRESH_S = 15.0
 
 
 @dataclass
 class App:
     consumer: CaseConsumer
     engine: AsyncEngine
+    telemetry: Telemetry
+    cost_tracker: CostTracker
 
 
 def build_gateway(settings: Settings) -> McpToolGateway:
@@ -57,7 +68,7 @@ def build_gateway(settings: Settings) -> McpToolGateway:
     )
 
 
-def build_agent(settings: Settings) -> InvestigationAgent:
+def build_agent(settings: Settings, telemetry: Telemetry) -> InvestigationAgent:
     client = (
         anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         if settings.anthropic_api_key
@@ -70,22 +81,30 @@ def build_agent(settings: Settings) -> InvestigationAgent:
         max_tokens=settings.llm_max_tokens,
     )
     return InvestigationAgent(
-        llm,
-        build_gateway(settings),
+        TracedLlm(llm, telemetry),
+        TracedGateway(build_gateway(settings), telemetry),
         AgentConfig(
             max_steps=settings.max_steps,
             max_analyze_rounds=settings.max_analyze_rounds,
             degraded_confidence_cap=settings.degraded_confidence_cap,
         ),
+        telemetry,
     )
 
 
-def build_app(settings: Settings) -> App:
+def build_app(settings: Settings, telemetry: Telemetry) -> App:
     engine = make_engine(settings.database_url)
+    cost_tracker = CostTracker(
+        settings.cost_ceiling_usd,
+        per_case_alert_usd=settings.per_case_cost_alert_usd,
+        telemetry=telemetry,
+    )
     processor = CaseProcessor(
         make_session_factory(engine),
-        build_agent(settings),
+        build_agent(settings, telemetry),
         default_policy(settings.auto_threshold),
+        telemetry=telemetry,
+        cost_tracker=cost_tracker,
     )
     dlq = KafkaDlqPublisher(
         Producer(
@@ -109,23 +128,59 @@ def build_app(settings: Settings) -> App:
         processor,
         max_inflight=settings.max_inflight_cases,
     )
-    return App(consumer=consumer, engine=engine)
+    return App(consumer=consumer, engine=engine, telemetry=telemetry, cost_tracker=cost_tracker)
+
+
+async def _report_gauges(app: App) -> None:
+    """Refresh the queue-depth / pending-approvals gauges from the database."""
+    sessions = make_session_factory(app.engine)
+    while True:
+        try:
+            async with sessions() as session:
+                m = await compute_metrics(session)
+            app.telemetry.set_gauges(
+                queue_depth=m.queue_depth, pending_approvals=m.pending_approvals
+            )
+        except Exception:  # noqa: BLE001 - metrics must never take the pipeline down
+            log.warning("could not refresh queue gauges", exc_info=True)
+        await asyncio.sleep(GAUGE_REFRESH_S)
 
 
 async def amain() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     settings = get_settings()  # fails fast on missing/invalid config
-    app = build_app(settings)
+    configure_logging(settings.log_level, json_logs=settings.log_json)
+    telemetry = setup_telemetry(
+        "settleagent-agent",
+        settings.otel_exporter_otlp_endpoint,
+        enabled=settings.otel_enabled,
+        metric_interval_ms=settings.otel_metric_interval_ms,
+    )
+    app = build_app(settings, telemetry)
+    async with make_session_factory(app.engine)() as session:
+        app.cost_tracker.seed(
+            await total_cost(session)
+        )  # spend to date, so restarts keep the budget
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, app.consumer.stop)
+    reporter = asyncio.create_task(_report_gauges(app))
     log.info(
-        "settleagent started (topic=%s, model=%s)", settings.kafka_topic, settings.anthropic_model
+        "settleagent started",
+        extra={
+            "topic": settings.kafka_topic,
+            "model": settings.anthropic_model,
+            "otel": settings.otel_enabled,
+            "spend_to_date_usd": round(app.cost_tracker.total_usd, 6),
+        },
     )
     try:
         await app.consumer.run()
     finally:
+        reporter.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reporter
         await app.engine.dispose()
+        telemetry.shutdown()  # flush spans/metrics
         log.info("settleagent stopped")
 
 
